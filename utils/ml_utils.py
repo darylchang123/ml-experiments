@@ -130,38 +130,68 @@ def load_batched_and_resized_dataset(
     return train_batches, validation_batches, test_batches
 
 
-def build_and_compile_model(
-    pre_trained_model='default',
-    top_layers='default',
-    optimizer='default',
+def build_model(
+    optimizer=keras.optimizers.SGD(learning_rate=0.01),
+    initializer=keras.initializers.glorot_uniform(seed=0),
 ):
     """
-    Generates model by stacking layers on top of a pre-trained model, with the specified optimizer
-    :param pre_trained_model: Pre-trained model, e.g. models in https://keras.io/applications/
-    :param top_layers: Layers to stack on top of the pre-trained model
-    :param optimizer: Optimizer to use
-    :return: Compiled model
+    Builds a base model according to the parameters specified. Architecture is similar to VGG16.
+    :param optimizer: Type of optimizer to use, along with corresponding optimizer settings
+    :param initializer: Kernel initializer to use for each layer
+    :return: Compiled Keras model
     """
-    # Set defaults
-    if pre_trained_model == 'default':
-        pre_trained_model = VGG16(include_top=False, input_shape=(IMG_SIZE,IMG_SIZE,3))
-        pre_trained_model.trainable = False
-    if top_layers == 'default':
-        initializer = keras.initializers.RandomNormal(seed=0)
-        top_layers = [
-            layers.Flatten(),
-            layers.Dense(256, activation='relu', kernel_initializer=initializer, bias_initializer=initializer),
-            layers.Dense(256, activation='relu', kernel_initializer=initializer, bias_initializer=initializer),
-            layers.Dense(1, activation='sigmoid'),
-        ]
-    if optimizer == 'default':
-        optimizer = keras.optimizers.SGD(lr=1e-3)
-      
-    # Build model
-    all_layers = [pre_trained_model] + top_layers
-    model = keras.models.Sequential(all_layers)
-    
-    # Compile model
+    model = keras.models.Sequential([
+        layers.Conv2D(
+            input_shape=(IMG_SIZE,IMG_SIZE,3),
+            filters=4,
+            kernel_size=3,
+            strides=1,
+            padding='same',
+            activation='relu',
+            kernel_initializer=initializer,
+        ),
+        layers.MaxPooling2D(),
+        layers.Conv2D(
+            filters=8,
+            kernel_size=3,
+            strides=1,
+            padding='same',
+            activation='relu',
+            kernel_initializer=initializer,
+        ),
+        layers.MaxPooling2D(),
+        layers.Conv2D(
+            filters=16,
+            kernel_size=3,
+            strides=1,
+            padding='same',
+            activation='relu',
+            kernel_initializer=initializer,
+        ),
+        layers.MaxPooling2D(),
+        layers.Conv2D(
+            filters=32,
+            kernel_size=3,
+            strides=1,
+            padding='same',
+            activation='relu',
+            kernel_initializer=initializer,
+        ),
+        layers.MaxPooling2D(),
+        layers.Conv2D(
+            filters=64,
+            kernel_size=3,
+            strides=1,
+            padding='same',
+            activation='relu',
+            kernel_initializer=initializer,
+        ),
+        layers.MaxPooling2D(),
+        layers.Flatten(),
+        layers.Dense(256, activation='relu', kernel_initializer=initializer),
+        layers.Dense(256, activation='relu', kernel_initializer=initializer),
+        layers.Dense(1, activation='sigmoid', kernel_initializer=initializer),
+    ])
     model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     return model
 

@@ -21,13 +21,13 @@ def load_dataset(dataset_name, shuffle_seed=SHUFFLE_SEED):
     Loads the tensorflow datasets
     :param dataset_name: One of the following dataset names: https://www.tensorflow.org/datasets/catalog/overview
     :param shuffle_seed: Seed for shuffling
-    :return: (raw_train, raw_validation, raw_test), label_metadata
+    :return: (raw_train, raw_validation), label_metadata
     """
     read_config = tfds.ReadConfig(shuffle_seed=shuffle_seed)
     if dataset_name == 'cats_vs_dogs':
-        (raw_train, raw_validation, raw_test), metadata = tfds.load(
+        (raw_train, raw_validation), metadata = tfds.load(
             'cats_vs_dogs',
-            split=['train[:80%]', 'train[80%:90%]', 'train[90%:]'],
+            split=['train[:80%]', 'train[80%:]'],
             shuffle_files=True,
             with_info=True,
             as_supervised=True,
@@ -37,9 +37,7 @@ def load_dataset(dataset_name, shuffle_seed=SHUFFLE_SEED):
         summarize_dataset(raw_train)
         print('\nValidation Data Summary')
         summarize_dataset(raw_validation)
-        print('\nTest Data Summary')
-        summarize_dataset(raw_test)
-        return (raw_train, raw_validation, raw_test), metadata.features['label'].names
+        return (raw_train, raw_validation), metadata.features['label'].names
     return None
 
 
@@ -104,20 +102,18 @@ def load_batched_and_resized_dataset(
     :param img_size: Target image size, defaults to IMG_SIZE
     :param shuffle_buffer_size: Number of examples to load into buffer for shuffling, defaults to SHUFFLE_BUFFER_SIZE
     :param shuffle_seed: Seed for shuffling, defaults to SHUFFLE_SEED
-    :return: train_batches, validation_batches, test_batches
+    :return: train_batches, validation_batches
     """
     # Load dataset
-    (raw_train, raw_validation, raw_test), label_names = load_dataset('cats_vs_dogs', shuffle_seed=shuffle_seed)
+    (raw_train, raw_validation), label_names = load_dataset('cats_vs_dogs', shuffle_seed=shuffle_seed)
     
     # Resize images and normalize (divide by 255)
     train = raw_train.map(lambda img, lbl: resize_image(img, lbl, img_size))
     validation = raw_validation.map(lambda img, lbl: resize_image(img, lbl, img_size))
-    test = raw_test.map(lambda img, lbl: resize_image(img, lbl, img_size))
     
     # Cache data in memory
     train = train.cache()
     validation = validation.cache()
-    test = test.cache()
     
     # Divide data into batches
     train_batches = train.shuffle(
@@ -126,9 +122,8 @@ def load_batched_and_resized_dataset(
         reshuffle_each_iteration=False,
     ).batch(batch_size)
     validation_batches = validation.batch(batch_size)
-    test_batches = test.batch(batch_size)
     
-    return train_batches, validation_batches, test_batches
+    return train_batches, validation_batches
 
 
 def build_model(

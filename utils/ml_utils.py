@@ -223,4 +223,37 @@ def summarize_diagnostics(history):
     plt.legend()
     plt.grid(True)
     plt.show()
+    
 
+def plot_accuracies_by_param(param_values, history_dict, param_name, filename):
+    """
+    Given a set of parameter values (e.g. batch sizes) and histories, this function
+    creates two plots: one of training accuracy and another of validation accuracy
+    :param param_values: List of parameter values used to generate histories (e.g. batch sizes)
+    :param history_dict: Dictionary from param value to a Keras history.history
+    :param param_name: String name of the parameter (e.g. 'batch size')
+    :param filename: file to save the plot to
+    """
+    plt.figure(figsize=(10, 10), dpi=80)
+    plt.subplot(211)
+    plt.title('Effect of {} on training accuracy'.format(param_name))
+    for param_value in param_values:
+        if param_value in history_dict:
+            plt.plot(history_dict[param_value]['accuracy'], label=str(param_value))
+        plt.xlabel('Epoch')
+        plt.ylabel(param_name)
+        plt.grid(True)
+        plt.legend(loc='best')
+    
+    plt.subplot(212)
+    plt.title('Effect of {} on validation accuracy'.format(param_name))
+    for param_value in param_values:
+        if param_value in history_dict:
+            plt.plot(history_dict[param_value]['val_accuracy'], label=str(param_value))
+        plt.xlabel('Epoch')
+        plt.ylabel(param_name)
+        plt.grid(True)
+        plt.legend(loc='best')
+
+    plt.show()
+    plt.savefig('graphs/{}'.format(filename))

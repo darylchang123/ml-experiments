@@ -122,7 +122,8 @@ def load_batched_and_resized_dataset(
     # Divide data into batches
     train_batches = train.shuffle(
         buffer_size=shuffle_buffer_size,
-        seed=shuffle_seed
+        seed=shuffle_seed,
+        reshuffle_each_iteration=False,
     ).batch(batch_size)
     validation_batches = validation.batch(batch_size)
     test_batches = test.batch(batch_size)

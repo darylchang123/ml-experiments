@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras import layers
+from tensorflow.keras import layers, regularizers
 from tensorflow import keras
 from tensorflow.keras.applications.vgg16 import VGG16
 
@@ -179,16 +179,25 @@ class TimeHistory(keras.callbacks.Callback):
     def on_epoch_end(self, batch, logs={}):
         self.times.append(time.time() - self.epoch_time_start)
 
+        
 def build_model(
-    optimizer=keras.optimizers.SGD(learning_rate=0.01),
+    dropout_rate=0.2,
+    optimizer=keras.optimizers.SGD(learning_rate=0.1),
     initializer=keras.initializers.glorot_uniform(seed=0),
-    input_shape=(128, 128, 3),
+    seed_value=0,
+    l1_regularizer=0,
+    l2_regularizer=0,
+    input_shape=(128,128,3),
 ):
     """
     Builds a base model according to the parameters specified. Architecture is similar to VGG16.
+    :param dropout_rate: Dropout rate to use
     :param optimizer: Type of optimizer to use, along with corresponding optimizer settings
     :param initializer: Kernel initializer to use for each layer
-    :param input_shape: Defines the shape of the image input, defaults to (128, 128, 3)
+    :param seed_value: Seed value to use for dropout layer
+    :param l1_regularizer: L1 regularizer instance
+    :param l2_regularizer: L2 regularizer instance
+    :param input_shape: Shape of image input
     :return: Compiled Keras model
     """
     model = keras.models.Sequential([
@@ -200,8 +209,14 @@ def build_model(
             padding='same',
             activation='relu',
             kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
         ),
         layers.MaxPooling2D(),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
         layers.Conv2D(
             filters=8,
             kernel_size=3,
@@ -209,8 +224,14 @@ def build_model(
             padding='same',
             activation='relu',
             kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
         ),
         layers.MaxPooling2D(),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
         layers.Conv2D(
             filters=16,
             kernel_size=3,
@@ -218,8 +239,14 @@ def build_model(
             padding='same',
             activation='relu',
             kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
         ),
         layers.MaxPooling2D(),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
         layers.Conv2D(
             filters=32,
             kernel_size=3,
@@ -227,8 +254,14 @@ def build_model(
             padding='same',
             activation='relu',
             kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
         ),
         layers.MaxPooling2D(),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
         layers.Conv2D(
             filters=64,
             kernel_size=3,
@@ -236,12 +269,40 @@ def build_model(
             padding='same',
             activation='relu',
             kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
         ),
         layers.MaxPooling2D(),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
         layers.Flatten(),
-        layers.Dense(256, activation='relu', kernel_initializer=initializer),
-        layers.Dense(256, activation='relu', kernel_initializer=initializer),
-        layers.Dense(1, activation='sigmoid', kernel_initializer=initializer),
+        layers.Dense(
+            units=256, 
+            activation='relu', 
+            kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
+        ),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
+        layers.Dense(
+            units=256, 
+            activation='relu', 
+            kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
+        ),
+        layers.Dense(
+            units=1, 
+            activation='sigmoid', 
+            kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
+        ),
     ])
     model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     return model

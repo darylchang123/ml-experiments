@@ -21,7 +21,11 @@ IMG_SIZE = 128
 
 
 class ModelState():
-    def __init__(self, weights, history, times):
+    def __init__(
+            self, 
+            weights=None, 
+            history=None, 
+            times=None):
         self.weights=weights
         self.history=history
         self.times=times

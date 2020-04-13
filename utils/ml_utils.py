@@ -260,7 +260,7 @@ def summarize_diagnostics(history):
     plt.show()
     
 
-def plot_accuracies_by_param(param_values, history_dict, param_name, filename):
+def plot_accuracies_by_param(model_state_by_type, param_name, filename):
     """
     Given a set of parameter values (e.g. batch sizes) and histories, this function
     creates two plots: one of training accuracy and another of validation accuracy
@@ -272,9 +272,8 @@ def plot_accuracies_by_param(param_values, history_dict, param_name, filename):
     plt.figure(figsize=(10, 10), dpi=80)
     plt.subplot(211)
     plt.title('Effect of {} on training accuracy'.format(param_name))
-    for param_value in param_values:
-        if param_value in history_dict:
-            plt.plot(history_dict[param_value]['accuracy'], label=str(param_value))
+    for typ, state in model_state_by_type.items():
+        plt.plot(state.history['accuracy'], label=str(typ))
         plt.xlabel('Epoch')
         plt.ylabel('Accuracy')
         plt.grid(True)
@@ -282,9 +281,8 @@ def plot_accuracies_by_param(param_values, history_dict, param_name, filename):
     
     plt.subplot(212)
     plt.title('Effect of {} on validation accuracy'.format(param_name))
-    for param_value in param_values:
-        if param_value in history_dict:
-            plt.plot(history_dict[param_value]['val_accuracy'], label=str(param_value))
+    for typ, state in model_state_by_type.items():
+        plt.plot(state.history['val_accuracy'], label=str(typ))
         plt.xlabel('Epoch')
         plt.ylabel('Accuracy')
         plt.grid(True)

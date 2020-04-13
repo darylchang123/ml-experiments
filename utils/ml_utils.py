@@ -8,6 +8,9 @@ tfds.disable_progress_bar()
 
 import numpy as np
 import matplotlib.pyplot as plt
+from collections import namedtuple
+import pickle
+import time
 
 import urllib3
 urllib3.disable_warnings()
@@ -15,6 +18,28 @@ urllib3.disable_warnings()
 SHUFFLE_SEED = 524287
 SHUFFLE_BUFFER_SIZE = 1000
 IMG_SIZE = 128
+
+
+class ModelState():
+    def __init__(self, weights, history, times):
+        self.weights=weights
+        self.history=history
+        self.times=times
+    weights = None
+    history = None 
+    times = None
+
+
+class TimeHistory(keras.callbacks.Callback):
+    def on_train_begin(self, logs={}):
+        self.times = []
+
+    def on_epoch_begin(self, batch, logs={}):
+        self.epoch_time_start = time.time()
+
+    def on_epoch_end(self, batch, logs={}):
+        self.times.append(time.time() - self.epoch_time_start)
+
 
 def load_dataset(dataset_name, shuffle_seed=SHUFFLE_SEED):
     """
@@ -192,6 +217,17 @@ def build_model(
     return model
 
 
+def train_model(model, train, validation, epochs):
+    time_callback = TimeHistory()
+    history = model.fit(
+        train,
+        epochs=epochs,
+        validation_data=validation,
+        callbacks=[time_callback]
+    )
+    return get_model_state(model, history, time_callback)
+
+
 def summarize_diagnostics(history):
     """
     # Plot diagnostic learning curves
@@ -202,8 +238,8 @@ def summarize_diagnostics(history):
     plt.figure(figsize=(10, 10), dpi=80)
     plt.subplot(211)
     plt.title('Cross Entropy Loss')
-    plt.plot(history.history['loss'], color='blue', label='train')
-    plt.plot(history.history['val_loss'], color='orange', label='val')
+    plt.plot(history['loss'], color='blue', label='train')
+    plt.plot(history['val_loss'], color='orange', label='val')
     plt.xlabel('Epoch')
     plt.ylabel('Cross Entropy Loss')
     plt.grid(True)
@@ -211,8 +247,8 @@ def summarize_diagnostics(history):
     # Plot accuracy
     plt.subplot(212)
     plt.title('Classification Accuracy')
-    plt.plot(history.history['accuracy'], color='blue', label='train')
-    plt.plot(history.history['val_accuracy'], color='orange', label='val')
+    plt.plot(history['accuracy'], color='blue', label='train')
+    plt.plot(history['val_accuracy'], color='orange', label='val')
     plt.xlabel('Epoch')
     plt.ylabel('Classification Accuracy')
     plt.legend()
@@ -236,7 +272,7 @@ def plot_accuracies_by_param(param_values, history_dict, param_name, filename):
         if param_value in history_dict:
             plt.plot(history_dict[param_value]['accuracy'], label=str(param_value))
         plt.xlabel('Epoch')
-        plt.ylabel(param_name)
+        plt.ylabel('Accuracy')
         plt.grid(True)
         plt.legend(loc='best')
     
@@ -246,9 +282,57 @@ def plot_accuracies_by_param(param_values, history_dict, param_name, filename):
         if param_value in history_dict:
             plt.plot(history_dict[param_value]['val_accuracy'], label=str(param_value))
         plt.xlabel('Epoch')
-        plt.ylabel(param_name)
+        plt.ylabel('Accuracy')
         plt.grid(True)
         plt.legend(loc='best')
 
     plt.show()
     plt.savefig('graphs/{}'.format(filename))
+
+
+def plot_loss_by_param(model_state_by_type, param_name, filename):
+    """
+    Given a set of parameter values (e.g. batch sizes) and histories, this function
+    creates two plots: one of training accuracy and another of validation accuracy
+    :param param_values: List of parameter values used to generate histories (e.g. batch sizes)
+    :param history_dict: Dictionary from param value to a Keras history.history
+    :param param_name: String name of the parameter (e.g. 'batch size')
+    :param filename: file to save the plot to
+    """
+    plt.figure(figsize=(10, 10), dpi=80)
+    plt.subplot(211)
+    plt.title('Effect of {} on training loss'.format(param_name))
+    for typ, state in model_state_by_type.items():
+        plt.plot(state.history['loss'], label=str(typ))
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.grid(True)
+        plt.legend(loc='best')
+    
+    plt.subplot(212)
+    plt.title('Effect of {} on validation loss'.format(param_name))
+    for typ, state in model_state_by_type.items():
+        plt.plot(state.history['val_loss'], label=str(typ))
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.grid(True)
+        plt.legend(loc='best')
+
+    plt.show()
+    plt.savefig('graphs/{}'.format(filename))
+    
+
+def get_model_state(model, model_history, time_callback):
+    model_state = ModelState()
+    model_state.history = model_history.history
+    model_state.times = time_callback.times
+    model_state.weights = [w.value() for w in model.weights]
+    return model_state
+    
+    
+def save_model_state(model_state, filename):
+    pickle.dump(model_state, open("pickled_objects/{filename}.pickle".format(filename=filename), "wb" ))
+    
+    
+def load_model_state(filename):
+    return pickle.load(open("pickled_objects/{filename}.pickle".format(filename=filename), "rb" ))

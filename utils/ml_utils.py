@@ -9,8 +9,33 @@ tfds.disable_progress_bar()
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import namedtuple
+import os
 import pickle
+import random
 import time
+
+
+def init_env():
+    """
+    Sets environment variables and seeds to make model training deterministic
+    """
+    # Make GPU use deterministic algorithms (see https://github.com/NVIDIA/tensorflow-determinism)
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+
+    # Seed value (can actually be different for each attribution step)
+    seed_value = 0
+
+    # 1. Set `PYTHONHASHSEED` environment variable at a fixed value
+    os.environ['PYTHONHASHSEED'] = str(seed_value)
+
+    # 2. Set `python` built-in pseudo-random generator at a fixed value
+    random.seed(seed_value)
+
+    # 3. Set `numpy` pseudo-random generator at a fixed value
+    np.random.seed(seed_value)
+
+    # 4. Set `tensorflow` pseudo-random generator at a fixed value
+    tf.random.set_seed(seed_value)
 
 
 class ModelState():

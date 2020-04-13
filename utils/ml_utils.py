@@ -15,6 +15,9 @@ import random
 import time
 
 
+
+############################ INITIALIZATION FUNCTIONS #########################
+
 def init_env():
     """
     Sets environment variables and seeds to make model training deterministic
@@ -38,30 +41,7 @@ def init_env():
     tf.random.set_seed(seed_value)
 
 
-class ModelState():
-    def __init__(
-            self, 
-            weights=None, 
-            history=None, 
-            times=None):
-        self.weights=weights
-        self.history=history
-        self.times=times
-    weights = None
-    history = None 
-    times = None
-
-
-class TimeHistory(keras.callbacks.Callback):
-    def on_train_begin(self, logs={}):
-        self.times = []
-
-    def on_epoch_begin(self, batch, logs={}):
-        self.epoch_time_start = time.time()
-
-    def on_epoch_end(self, batch, logs={}):
-        self.times.append(time.time() - self.epoch_time_start)
-
+############################ DATASET FUNCTIONS ################################
 
 def load_dataset(dataset_name, shuffle_seed):
     """
@@ -172,6 +152,32 @@ def load_batched_and_resized_dataset(
     
     return train_batches, validation_batches
 
+
+############################ MODEL BUILDING AND TRAINING FUNCTIONS ################################
+    
+class ModelState():
+    def __init__(
+            self, 
+            weights=None, 
+            history=None, 
+            times=None):
+        self.weights=weights
+        self.history=history
+        self.times=times
+    weights = None
+    history = None 
+    times = None
+
+
+class TimeHistory(keras.callbacks.Callback):
+    def on_train_begin(self, logs={}):
+        self.times = []
+
+    def on_epoch_begin(self, batch, logs={}):
+        self.epoch_time_start = time.time()
+
+    def on_epoch_end(self, batch, logs={}):
+        self.times.append(time.time() - self.epoch_time_start)
 
 def build_model(
     optimizer=keras.optimizers.SGD(learning_rate=0.01),

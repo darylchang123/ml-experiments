@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras import layers
+from tensorflow.keras import layers, regularizers
 from tensorflow import keras
 from tensorflow.keras.applications.vgg16 import VGG16
 
@@ -9,43 +9,41 @@ tfds.disable_progress_bar()
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import namedtuple
+import os
 import pickle
+import random
 import time
 
-import urllib3
-urllib3.disable_warnings()
-
-SHUFFLE_SEED = 524287
-SHUFFLE_BUFFER_SIZE = 1000
-IMG_SIZE = 128
 
 
-class ModelState():
-    def __init__(
-            self, 
-            weights=None, 
-            history=None, 
-            times=None):
-        self.weights=weights
-        self.history=history
-        self.times=times
-    weights = None
-    history = None 
-    times = None
+############################ INITIALIZATION FUNCTIONS #########################
+
+def init_env():
+    """
+    Sets environment variables and seeds to make model training deterministic
+    """
+    # Make GPU use deterministic algorithms (see https://github.com/NVIDIA/tensorflow-determinism)
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+
+    # Seed value (can actually be different for each attribution step)
+    seed_value = 0
+
+    # 1. Set `PYTHONHASHSEED` environment variable at a fixed value
+    os.environ['PYTHONHASHSEED'] = str(seed_value)
+
+    # 2. Set `python` built-in pseudo-random generator at a fixed value
+    random.seed(seed_value)
+
+    # 3. Set `numpy` pseudo-random generator at a fixed value
+    np.random.seed(seed_value)
+
+    # 4. Set `tensorflow` pseudo-random generator at a fixed value
+    tf.random.set_seed(seed_value)
 
 
-class TimeHistory(keras.callbacks.Callback):
-    def on_train_begin(self, logs={}):
-        self.times = []
+############################ DATASET FUNCTIONS ################################
 
-    def on_epoch_begin(self, batch, logs={}):
-        self.epoch_time_start = time.time()
-
-    def on_epoch_end(self, batch, logs={}):
-        self.times.append(time.time() - self.epoch_time_start)
-
-
-def load_dataset(dataset_name, shuffle_seed=SHUFFLE_SEED):
+def load_dataset(dataset_name, shuffle_seed):
     """
     Loads the tensorflow datasets
     :param dataset_name: One of the following dataset names: https://www.tensorflow.org/datasets/catalog/overview
@@ -120,17 +118,17 @@ def show_image(image, label, label_names):
 def load_batched_and_resized_dataset(
     dataset_name,
     batch_size,
-    img_size=IMG_SIZE,
-    shuffle_buffer_size=SHUFFLE_BUFFER_SIZE,
-    shuffle_seed=SHUFFLE_SEED
+    img_size=128,
+    shuffle_buffer_size=1000,
+    shuffle_seed=0,
 ):
     """
     Resizes and normalizes images, caches them in memory, and divides them into batches
     :param dataset_name: One of the following dataset names: https://www.tensorflow.org/datasets/catalog/overview
     :param batch_size: Batch size
-    :param img_size: Target image size, defaults to IMG_SIZE
-    :param shuffle_buffer_size: Number of examples to load into buffer for shuffling, defaults to SHUFFLE_BUFFER_SIZE
-    :param shuffle_seed: Seed for shuffling, defaults to SHUFFLE_SEED
+    :param img_size: Target image size, defaults to 128
+    :param shuffle_buffer_size: Number of examples to load into buffer for shuffling, defaults to 1000
+    :param shuffle_seed: Seed for shuffling, defaults to 0
     :return: train_batches, validation_batches
     """
     # Load dataset
@@ -155,27 +153,70 @@ def load_batched_and_resized_dataset(
     return train_batches, validation_batches
 
 
+############################ MODEL BUILDING AND TRAINING FUNCTIONS ################################
+    
+class ModelState():
+    def __init__(
+            self, 
+            weights=None, 
+            history=None, 
+            times=None):
+        self.weights=weights
+        self.history=history
+        self.times=times
+    weights = None
+    history = None 
+    times = None
+
+
+class TimeHistory(keras.callbacks.Callback):
+    def on_train_begin(self, logs={}):
+        self.times = []
+
+    def on_epoch_begin(self, batch, logs={}):
+        self.epoch_time_start = time.time()
+
+    def on_epoch_end(self, batch, logs={}):
+        self.times.append(time.time() - self.epoch_time_start)
+
+        
 def build_model(
-    optimizer=keras.optimizers.SGD(learning_rate=0.01),
+    dropout_rate=0.2,
+    optimizer=keras.optimizers.SGD(learning_rate=0.1),
     initializer=keras.initializers.glorot_uniform(seed=0),
+    seed_value=0,
+    l1_regularizer=0,
+    l2_regularizer=0,
+    input_shape=(128,128,3),
 ):
     """
     Builds a base model according to the parameters specified. Architecture is similar to VGG16.
+    :param dropout_rate: Dropout rate to use
     :param optimizer: Type of optimizer to use, along with corresponding optimizer settings
     :param initializer: Kernel initializer to use for each layer
+    :param seed_value: Seed value to use for dropout layer
+    :param l1_regularizer: L1 regularizer instance
+    :param l2_regularizer: L2 regularizer instance
+    :param input_shape: Shape of image input
     :return: Compiled Keras model
     """
     model = keras.models.Sequential([
         layers.Conv2D(
-            input_shape=(IMG_SIZE,IMG_SIZE,3),
+            input_shape=input_shape,
             filters=4,
             kernel_size=3,
             strides=1,
             padding='same',
             activation='relu',
             kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
         ),
         layers.MaxPooling2D(),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
         layers.Conv2D(
             filters=8,
             kernel_size=3,
@@ -183,8 +224,14 @@ def build_model(
             padding='same',
             activation='relu',
             kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
         ),
         layers.MaxPooling2D(),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
         layers.Conv2D(
             filters=16,
             kernel_size=3,
@@ -192,8 +239,14 @@ def build_model(
             padding='same',
             activation='relu',
             kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
         ),
         layers.MaxPooling2D(),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
         layers.Conv2D(
             filters=32,
             kernel_size=3,
@@ -201,8 +254,14 @@ def build_model(
             padding='same',
             activation='relu',
             kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
         ),
         layers.MaxPooling2D(),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
         layers.Conv2D(
             filters=64,
             kernel_size=3,
@@ -210,12 +269,40 @@ def build_model(
             padding='same',
             activation='relu',
             kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
         ),
         layers.MaxPooling2D(),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
         layers.Flatten(),
-        layers.Dense(256, activation='relu', kernel_initializer=initializer),
-        layers.Dense(256, activation='relu', kernel_initializer=initializer),
-        layers.Dense(1, activation='sigmoid', kernel_initializer=initializer),
+        layers.Dense(
+            units=256, 
+            activation='relu', 
+            kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
+        ),
+        layers.Dropout(
+            rate=dropout_rate,
+            seed=seed_value
+        ),
+        layers.Dense(
+            units=256, 
+            activation='relu', 
+            kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
+        ),
+        layers.Dense(
+            units=1, 
+            activation='sigmoid', 
+            kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
+        ),
     ])
     model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     return model

@@ -12,13 +12,6 @@ from collections import namedtuple
 import pickle
 import time
 
-import urllib3
-urllib3.disable_warnings()
-
-SHUFFLE_SEED = 524287
-SHUFFLE_BUFFER_SIZE = 1000
-IMG_SIZE = 128
-
 
 class ModelState():
     def __init__(
@@ -45,7 +38,7 @@ class TimeHistory(keras.callbacks.Callback):
         self.times.append(time.time() - self.epoch_time_start)
 
 
-def load_dataset(dataset_name, shuffle_seed=SHUFFLE_SEED):
+def load_dataset(dataset_name, shuffle_seed):
     """
     Loads the tensorflow datasets
     :param dataset_name: One of the following dataset names: https://www.tensorflow.org/datasets/catalog/overview
@@ -120,17 +113,17 @@ def show_image(image, label, label_names):
 def load_batched_and_resized_dataset(
     dataset_name,
     batch_size,
-    img_size=IMG_SIZE,
-    shuffle_buffer_size=SHUFFLE_BUFFER_SIZE,
-    shuffle_seed=SHUFFLE_SEED
+    img_size=128,
+    shuffle_buffer_size=1000,
+    shuffle_seed=0,
 ):
     """
     Resizes and normalizes images, caches them in memory, and divides them into batches
     :param dataset_name: One of the following dataset names: https://www.tensorflow.org/datasets/catalog/overview
     :param batch_size: Batch size
-    :param img_size: Target image size, defaults to IMG_SIZE
-    :param shuffle_buffer_size: Number of examples to load into buffer for shuffling, defaults to SHUFFLE_BUFFER_SIZE
-    :param shuffle_seed: Seed for shuffling, defaults to SHUFFLE_SEED
+    :param img_size: Target image size, defaults to 128
+    :param shuffle_buffer_size: Number of examples to load into buffer for shuffling, defaults to 1000
+    :param shuffle_seed: Seed for shuffling, defaults to 0
     :return: train_batches, validation_batches
     """
     # Load dataset
@@ -158,16 +151,18 @@ def load_batched_and_resized_dataset(
 def build_model(
     optimizer=keras.optimizers.SGD(learning_rate=0.01),
     initializer=keras.initializers.glorot_uniform(seed=0),
+    input_shape=(128, 128, 3),
 ):
     """
     Builds a base model according to the parameters specified. Architecture is similar to VGG16.
     :param optimizer: Type of optimizer to use, along with corresponding optimizer settings
     :param initializer: Kernel initializer to use for each layer
+    :param input_shape: Defines the shape of the image input, defaults to (128, 128, 3)
     :return: Compiled Keras model
     """
     model = keras.models.Sequential([
         layers.Conv2D(
-            input_shape=(IMG_SIZE,IMG_SIZE,3),
+            input_shape=input_shape,
             filters=4,
             kernel_size=3,
             strides=1,

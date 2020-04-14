@@ -157,16 +157,14 @@ def load_batched_and_resized_dataset(
     
 class ModelState():
     def __init__(
-            self, 
-            weights=None, 
-            history=None, 
-            times=None):
-        self.weights=weights
-        self.history=history
-        self.times=times
-    weights = None
-    history = None 
-    times = None
+        self, 
+        weights=None, 
+        history=None, 
+        times=None,
+    ):
+        self.weights = weights
+        self.history = history
+        self.times = times
 
 
 class TimeHistory(keras.callbacks.Callback):
@@ -179,7 +177,6 @@ class TimeHistory(keras.callbacks.Callback):
     def on_epoch_end(self, batch, logs={}):
         self.times.append(time.time() - self.epoch_time_start)
 
-        
 def build_model(
     dropout_rate=0.2,
     optimizer=keras.optimizers.SGD(learning_rate=0.1),
@@ -308,13 +305,13 @@ def build_model(
     return model
 
 
-def train_model(model, train, validation, epochs):
+def train_model(model, train, validation, epochs, extra_callbacks=[]):
     time_callback = TimeHistory()
     history = model.fit(
         train,
         epochs=epochs,
         validation_data=validation,
-        callbacks=[time_callback]
+        callbacks=[time_callback] + extra_callbacks
     )
     return get_model_state(model, history, time_callback)
 

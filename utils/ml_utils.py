@@ -501,9 +501,16 @@ def get_model_state(model, model_history, time_callback):
     
     
 def save_model_state(model_state, filename):
-    pickle.dump(model_state, open("pickled_objects/{filename}.pickle".format(filename=filename), "wb" ))
+    model_state_serialize={}
+    for key,state in model_state.items():
+        model_state_serialize[key]=(state.weights,state.history,state.times)
+    pickle.dump(model_state_serialize, 
+                open("pickled_objects/{filename}.pickle".format(filename=filename), "wb" ))
     
     
 def load_model_state(filename):
-    return pickle.load(open("pickled_objects/{filename}.pickle".format(filename=filename), "rb" ))
-
+    model_state_serialize=pickle.load(open("pickled_objects/{filename}.pickle".format(filename=filename), "rb" ))
+    model_state_by_regularizers={}
+    for key,state in model_state_serialize.items():
+        model_state_by_regularizers[key]=ModelState(weights=state[0],history=state[1],times=state[2])
+    return model_state_by_regularizers

@@ -7,6 +7,7 @@ import tensorflow_datasets as tfds
 tfds.disable_progress_bar()
 
 import numpy as np
+import seaborn as sns
 import matplotlib.pyplot as plt
 from collections import namedtuple
 import os
@@ -177,14 +178,19 @@ class TimeHistory(keras.callbacks.Callback):
     def on_epoch_end(self, batch, logs={}):
         self.times.append(time.time() - self.epoch_time_start)
 
+        
 def build_model(
-    dropout_rate=0.2,
+    conv_dropout_rate=0.2,
+    dense_dropout_rate=0.2,
     optimizer=keras.optimizers.SGD(learning_rate=0.1),
     initializer=keras.initializers.glorot_uniform(seed=0),
     seed_value=0,
-    l1_regularizer=0,
-    l2_regularizer=0,
+    conv_l1_regularizer=0,
+    conv_l2_regularizer=0,
+    dense_l1_regularizer=0,
+    dense_l2_regularizer=0,
     input_shape=(128,128,3),
+    use_batch_normalization=False,
 ):
     """
     Builds a base model according to the parameters specified. Architecture is similar to VGG16.
@@ -197,8 +203,28 @@ def build_model(
     :param input_shape: Shape of image input
     :return: Compiled Keras model
     """
-    model = keras.models.Sequential([
-        layers.Conv2D(
+    def add_batch_norm(is_input=False):
+        if use_batch_normalization:
+            if is_input:
+                model.add(layers.BatchNormalization(input_shape=input_shape))
+            else:
+                model.add(layers.BatchNormalization())
+            
+    model = keras.models.Sequential()
+    add_batch_norm(is_input=True)
+    if use_batch_normalization:
+        model.add(layers.Conv2D(
+            filters=4,
+            kernel_size=3,
+            strides=1,
+            padding='same',
+            activation='relu',
+            kernel_initializer=initializer,
+            kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+        ))
+    else:
+        model.add(layers.Conv2D(
             input_shape=input_shape,
             filters=4,
             kernel_size=3,
@@ -206,101 +232,111 @@ def build_model(
             padding='same',
             activation='relu',
             kernel_initializer=initializer,
-            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
-            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
-        ),
-        layers.MaxPooling2D(),
-        layers.Dropout(
-            rate=dropout_rate,
-            seed=seed_value
-        ),
-        layers.Conv2D(
-            filters=8,
-            kernel_size=3,
-            strides=1,
-            padding='same',
-            activation='relu',
-            kernel_initializer=initializer,
-            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
-            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
-        ),
-        layers.MaxPooling2D(),
-        layers.Dropout(
-            rate=dropout_rate,
-            seed=seed_value
-        ),
-        layers.Conv2D(
-            filters=16,
-            kernel_size=3,
-            strides=1,
-            padding='same',
-            activation='relu',
-            kernel_initializer=initializer,
-            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
-            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
-        ),
-        layers.MaxPooling2D(),
-        layers.Dropout(
-            rate=dropout_rate,
-            seed=seed_value
-        ),
-        layers.Conv2D(
-            filters=32,
-            kernel_size=3,
-            strides=1,
-            padding='same',
-            activation='relu',
-            kernel_initializer=initializer,
-            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
-            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
-        ),
-        layers.MaxPooling2D(),
-        layers.Dropout(
-            rate=dropout_rate,
-            seed=seed_value
-        ),
-        layers.Conv2D(
-            filters=64,
-            kernel_size=3,
-            strides=1,
-            padding='same',
-            activation='relu',
-            kernel_initializer=initializer,
-            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
-            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
-        ),
-        layers.MaxPooling2D(),
-        layers.Dropout(
-            rate=dropout_rate,
-            seed=seed_value
-        ),
-        layers.Flatten(),
-        layers.Dense(
-            units=256, 
-            activation='relu', 
-            kernel_initializer=initializer,
-            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
-            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
-        ),
-        layers.Dropout(
-            rate=dropout_rate,
-            seed=seed_value
-        ),
-        layers.Dense(
-            units=256, 
-            activation='relu', 
-            kernel_initializer=initializer,
-            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
-            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
-        ),
-        layers.Dense(
-            units=1, 
-            activation='sigmoid', 
-            kernel_initializer=initializer,
-            kernel_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer),
-            bias_regularizer=regularizers.l1_l2(l1=l1_regularizer, l2=l2_regularizer)
-        ),
-    ])
+            kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+            bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+        ))
+    add_batch_norm()
+    model.add(layers.MaxPooling2D())
+    model.add(layers.Dropout(
+        rate=conv_dropout_rate,
+        seed=seed_value
+    ))
+    model.add(layers.Conv2D(
+        filters=8,
+        kernel_size=3,
+        strides=1,
+        padding='same',
+        activation='relu',
+        kernel_initializer=initializer,
+        kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+    ))
+    add_batch_norm()
+    model.add(layers.MaxPooling2D())
+    model.add(layers.Dropout(
+        rate=conv_dropout_rate,
+        seed=seed_value
+    ))
+    model.add(layers.Conv2D(
+        filters=16,
+        kernel_size=3,
+        strides=1,
+        padding='same',
+        activation='relu',
+        kernel_initializer=initializer,
+        kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+    ))
+    add_batch_norm()
+    model.add(layers.MaxPooling2D())
+    model.add(layers.Dropout(
+        rate=conv_dropout_rate,
+        seed=seed_value
+    ))
+    model.add(layers.Conv2D(
+        filters=32,
+        kernel_size=3,
+        strides=1,
+        padding='same',
+        activation='relu',
+        kernel_initializer=initializer,
+        kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+    ))
+    add_batch_norm()
+    model.add(layers.MaxPooling2D())
+    model.add(layers.Dropout(
+        rate=conv_dropout_rate,
+        seed=seed_value
+    ))
+    model.add(layers.Conv2D(
+        filters=64,
+        kernel_size=3,
+        strides=1,
+        padding='same',
+        activation='relu',
+        kernel_initializer=initializer,
+        kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+    ))
+    add_batch_norm()
+    model.add(layers.MaxPooling2D())
+    model.add(layers.Dropout(
+        rate=dense_dropout_rate,
+        seed=seed_value
+    ))
+    model.add(layers.Flatten())
+    model.add(layers.Dense(
+        units=256, 
+        activation='relu', 
+        kernel_initializer=initializer,
+        kernel_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer),
+        bias_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer)
+    ))
+    add_batch_norm()
+    model.add(layers.Dropout(
+        rate=dense_dropout_rate,
+        seed=seed_value
+    ))
+    model.add(layers.Dense(
+        units=256, 
+        activation='relu', 
+        kernel_initializer=initializer,
+        kernel_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer),
+        bias_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer)
+    ))
+    add_batch_norm()
+    model.add(layers.Dropout(
+        rate=dense_dropout_rate,
+        seed=seed_value
+    ))
+    model.add(layers.Dense(
+        units=1, 
+        activation='sigmoid', 
+        kernel_initializer=initializer,
+        kernel_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer),
+        bias_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer)
+    ))
     model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     return model
 
@@ -344,7 +380,7 @@ def summarize_diagnostics(history):
     plt.show()
     
 
-def plot_accuracies_by_param(model_state_by_type, param_name, filename):
+def plot_accuracies_by_param(model_state_by_type, param_name, filename, ylim_left=None, ylim_right=None):
     """
     Given a set of parameter values (e.g. batch sizes) and histories, this function
     creates two plots: one of training accuracy and another of validation accuracy
@@ -360,6 +396,7 @@ def plot_accuracies_by_param(model_state_by_type, param_name, filename):
         plt.plot(state.history['accuracy'], label=str(typ))
         plt.xlabel('Epoch')
         plt.ylabel('Accuracy')
+        plt.ylim(ylim_left,ylim_right)
         plt.grid(True)
         plt.legend(loc='best')
     
@@ -369,6 +406,7 @@ def plot_accuracies_by_param(model_state_by_type, param_name, filename):
         plt.plot(state.history['val_accuracy'], label=str(typ))
         plt.xlabel('Epoch')
         plt.ylabel('Accuracy')
+        plt.ylim(ylim_left,ylim_right)
         plt.grid(True)
         plt.legend(loc='best')
 
@@ -376,10 +414,10 @@ def plot_accuracies_by_param(model_state_by_type, param_name, filename):
     plt.savefig('graphs/{}'.format(filename))
 
 
-def plot_loss_by_param(model_state_by_type, param_name, filename):
+def plot_loss_by_param(model_state_by_type, param_name, filename, ylim_left=None, ylim_right=None):
     """
     Given a set of parameter values (e.g. batch sizes) and histories, this function
-    creates two plots: one of training accuracy and another of validation accuracy
+    creates two plots: one of training loss and another of validation loss
     :param param_values: List of parameter values used to generate histories (e.g. batch sizes)
     :param history_dict: Dictionary from param value to a Keras history.history
     :param param_name: String name of the parameter (e.g. 'batch size')
@@ -392,6 +430,7 @@ def plot_loss_by_param(model_state_by_type, param_name, filename):
         plt.plot(state.history['loss'], label=str(typ))
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
+        plt.ylim(ylim_left,ylim_right)
         plt.grid(True)
         plt.legend(loc='best')
     
@@ -401,10 +440,55 @@ def plot_loss_by_param(model_state_by_type, param_name, filename):
         plt.plot(state.history['val_loss'], label=str(typ))
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
+        plt.ylim(ylim_left,ylim_right)
         plt.grid(True)
         plt.legend(loc='best')
 
     plt.show()
+    plt.savefig('graphs/{}'.format(filename))
+    
+
+def plot_generalization_gap_by_param(model_state_by_type, param_name, filename, clipping_val=None, ylim_left=None, ylim_right=None):
+    """
+    Given a set of parameter values (e.g. batch sizes) and histories, this function
+    creates one plot representing generalization gap: val_loss/train_loss
+    :param param_values: List of parameter values used to generate histories (e.g. batch sizes)
+    :param history_dict: Dictionary from param value to a Keras history.history
+    :param param_name: String name of the parameter (e.g. 'batch size')
+    :param filename: file to save the plot to
+    """
+    plt.figure(figsize=(8, 6), dpi=80)
+    plt.title('Effect of {} on generalization gap'.format(param_name))
+    for typ, state in model_state_by_type.items():
+        gen_gap=np.array(state.history['val_loss'])/np.array(state.history['loss'])
+        if clipping_val:
+            gen_gap=np.clip(gen_gap, None, clipping_val)
+        plt.plot(gen_gap, label=str(typ))
+        plt.xlabel('Epoch')
+        plt.ylabel('Genralization Gap')
+        plt.ylim(ylim_left,ylim_right)
+        plt.grid(True)
+        plt.legend(loc='best')
+    plt.savefig('graphs/{}'.format(filename))
+
+    
+def visualize_weights(weights_by_key, filename, bins=None):
+    if not bins:
+        bins=[0.005*a-0.3 for a in range(120)]
+    plt.figure(figsize=(10, 10), dpi=80)
+    plt.title('Distribution of weights by model')
+
+    for model, weight in weights_by_key.items():
+        flat_weight=np.ndarray.flatten(weight)
+        max_wt=np.max(flat_weight)
+        min_wt=np.max(flat_weight)
+        
+        print('Model: {model}, Max Weight: {max_wt}, Min Weight: {min_wt}'.format(**locals()))
+        sns.distplot(flat_weight, label=str(model), kde=False, bins=bins, )
+        plt.xlabel('Weight')
+        plt.ylabel('Frequency')
+        plt.grid(True)
+        plt.legend(loc='best')
     plt.savefig('graphs/{}'.format(filename))
     
 
@@ -417,9 +501,16 @@ def get_model_state(model, model_history, time_callback):
     
     
 def save_model_state(model_state, filename):
-    pickle.dump(model_state, open("pickled_objects/{filename}.pickle".format(filename=filename), "wb" ))
+    model_state_serialize={}
+    for key,state in model_state.items():
+        model_state_serialize[key]=(state.weights,state.history,state.times)
+    pickle.dump(model_state_serialize, 
+                open("pickled_objects/{filename}.pickle".format(filename=filename), "wb" ))
     
     
 def load_model_state(filename):
-    return pickle.load(open("pickled_objects/{filename}.pickle".format(filename=filename), "rb" ))
-
+    model_state_serialize=pickle.load(open("pickled_objects/{filename}.pickle".format(filename=filename), "rb" ))
+    model_state_by_key={}
+    for key,state in model_state_serialize.items():
+        model_state_by_key[key]=ModelState(weights=state[0],history=state[1],times=state[2])
+    return model_state_by_key

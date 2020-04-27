@@ -510,7 +510,7 @@ def save_model_state(model_state, filename):
     
 def load_model_state(filename):
     model_state_serialize=pickle.load(open("pickled_objects/{filename}.pickle".format(filename=filename), "rb" ))
-    model_state_by_regularizers={}
+    model_state_by_key={}
     for key,state in model_state_serialize.items():
-        model_state_by_regularizers[key]=ModelState(weights=state[0],history=state[1],times=state[2])
-    return model_state_by_regularizers
+        model_state_by_key[key]=ModelState(weights=state[0],history=state[1],times=state[2])
+    return model_state_by_key

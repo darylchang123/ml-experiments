@@ -9,6 +9,7 @@ tfds.disable_progress_bar()
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from collections import namedtuple
 import os
 import pickle
@@ -86,16 +87,18 @@ def summarize_dataset(tf_data):
         ))
 
 
-def resize_image(image, label, img_size):
+def resize_image(image, label, img_size, normalize_pixel_values=True):
     """
     Resizes image
     :param image: Image
     :param label: Label
     :param img_size: Image size
+    :param normalize_pixel_values: Whether to divide pixel values by 255
     :return:
     """
     image = tf.cast(image, tf.float32)
-    image = image/255
+    if normalize_pixel_values:
+        image = image/255
     image = tf.image.resize(image, (img_size, img_size))
     return image, label
 
@@ -118,10 +121,11 @@ def show_image(image, label, label_names):
 
 def load_batched_and_resized_dataset(
     dataset_name,
-    batch_size,
+    batch_size=32,
     img_size=128,
     shuffle_buffer_size=1000,
     shuffle_seed=0,
+    normalize_pixel_values=True
 ):
     """
     Resizes and normalizes images, caches them in memory, and divides them into batches
@@ -130,14 +134,16 @@ def load_batched_and_resized_dataset(
     :param img_size: Target image size, defaults to 128
     :param shuffle_buffer_size: Number of examples to load into buffer for shuffling, defaults to 1000
     :param shuffle_seed: Seed for shuffling, defaults to 0
+    :param normalize_pixel_values: Whether to divide pixel values by 255.
     :return: train_batches, validation_batches
     """
     # Load dataset
-    (raw_train, raw_validation), label_names = load_dataset('cats_vs_dogs', shuffle_seed=shuffle_seed)
+    (raw_train, raw_validation), label_names = load_dataset(dataset_name, shuffle_seed=shuffle_seed)
     
-    # Resize images and normalize (divide by 255)
-    train = raw_train.map(lambda img, lbl: resize_image(img, lbl, img_size))
-    validation = raw_validation.map(lambda img, lbl: resize_image(img, lbl, img_size))
+    # Resize images and normalize (divide by 255) if specified
+    resize = lambda img, lbl: resize_image(img, lbl, img_size, normalize_pixel_values)
+    train = raw_train.map(resize)
+    validation = raw_validation.map(resize)
     
     # Cache data in memory
     train = train.cache()
@@ -350,8 +356,32 @@ def train_model(model, train, validation, epochs, extra_callbacks=[]):
         callbacks=[time_callback] + extra_callbacks
     )
     return get_model_state(model, history, time_callback)
+    
 
+def get_model_state(model, model_history, time_callback):
+    model_state = ModelState()
+    model_state.history = model_history.history
+    model_state.times = time_callback.times
+    model_state.weights = [w.value() for w in model.weights]
+    return model_state
+    
+    
+def save_model_state(model_state, filename):
+    model_state_serialize={}
+    for key,state in model_state.items():
+        model_state_serialize[key]=(state.weights,state.history,state.times)
+    pickle.dump(model_state_serialize, 
+                open("pickled_objects/{filename}.pickle".format(filename=filename), "wb" ))
+    
+    
+def load_model_state(filename):
+    model_state_serialize=pickle.load(open("pickled_objects/{filename}.pickle".format(filename=filename), "rb" ))
+    model_state_by_key={}
+    for key,state in model_state_serialize.items():
+        model_state_by_key[key]=ModelState(weights=state[0],history=state[1],times=state[2])
+    return model_state_by_key
 
+################################ VISUALIZATIONS ################################################################
 def summarize_diagnostics(history):
     """
     # Plot diagnostic learning curves
@@ -492,25 +522,172 @@ def visualize_weights(weights_by_key, filename, bins=None):
     plt.savefig('graphs/{}'.format(filename))
     
 
-def get_model_state(model, model_history, time_callback):
-    model_state = ModelState()
-    model_state.history = model_history.history
-    model_state.times = time_callback.times
-    model_state.weights = [w.value() for w in model.weights]
-    return model_state
+# Based on https://github.com/tomgoldstein/loss-landscape/blob/master/net_plotter.py#L195
+def get_random_filter_normalized_direction(weights):
+    """
+    Given a set of weights for a model, returns a random Gaussian direction.
+    Normalize each convolutional filter or each FC neuron to match the corresponding norm in the weights parameter.
+    :param weights: model weights
+    """
+    random_direction = []
+    for w in weights:
+        num_dimensions = len(w.shape)
+                             
+        # For biases, set to 0
+        if num_dimensions == 1:
+            new_w = np.zeros(w.shape)
+        
+        # For fully-connected layers, generate random vector for each neuron and normalize
+        elif num_dimensions == 2:
+            new_w = np.random.randn(*w.shape)
+            for f in range(w.shape[-1]):
+                new_filter = new_w[:, f]
+                old_filter = w[:, f]
+                new_filter *= np.linalg.norm(old_filter) / np.linalg.norm(new_filter)
+            
+        # For convolutional layers, generate random vector for each filter and normalize
+        elif num_dimensions == 4:
+            new_w = np.random.randn(*w.shape)
+            for f in range(w.shape[-1]):
+                new_filter = new_w[:, :, :, f]
+                old_filter = w[:, :, :, f]
+                new_filter *= np.linalg.norm(old_filter) / np.linalg.norm(new_filter)
+        
+        random_direction.append(new_w)
+    return random_direction
+
+
+def plot_loss_visualization_1d(base_model, training_data, validation_data, title=None, output_filename=None):
+    """
+    Visualizes the minimizer for a model along a random Gaussian filter-normalized direction.
+    :param base_model: model to evaluate
+    :param training_data: training data, used to generate training loss numbers
+    :param validation_data: validation data, used to generates validation loss numbers
+    :param title: title for the plot
+    :param output_filename: file to save the plot to
+    :return: x_values, train_losses, validation_losses
+    """
+    # Get weights and generate random direction
+    weights = base_model.get_weights()
+    direction = get_random_filter_normalized_direction(weights)
     
+    # Set up new model and plotting variables
+    x_values = np.linspace(-1, 1, 20)
+    train_losses = []
+    validation_losses = []
+    new_model = build_model()
     
-def save_model_state(model_state, filename):
-    model_state_serialize={}
-    for key,state in model_state.items():
-        model_state_serialize[key]=(state.weights,state.history,state.times)
-    pickle.dump(model_state_serialize, 
-                open("pickled_objects/{filename}.pickle".format(filename=filename), "wb" ))
+    # Compute training and validation loss for each linear combination of weight and direction
+    for x in x_values:
+        print("\nx: ", x)
+        
+        # Compute and set weights
+        new_weights = [w + x * d for w, d in zip(weights, direction)]
+        new_model.set_weights(new_weights)
+        
+        # Evaluate model
+        train_loss, train_accuracy = new_model.evaluate(training_data)
+        validation_loss, validation_accuracy = new_model.evaluate(validation_data)
+        
+        # Store losses
+        train_losses.append(train_loss)
+        validation_losses.append(validation_loss)
     
+    # Plot results
+    plt.plot(x_values, train_losses, linestyle='solid', label='train')
+    plt.plot(x_values, validation_losses, linestyle='dashed', label='validation')
+    plt.ylabel('Loss')
+    plt.xlabel('Alpha')
+    plt.legend()
+    if title:
+        plt.title(title)
+    plt.show()
+    if output_filename:
+        plt.savefig('graphs/{}'.format(output_filename))
     
-def load_model_state(filename):
-    model_state_serialize=pickle.load(open("pickled_objects/{filename}.pickle".format(filename=filename), "rb" ))
-    model_state_by_key={}
-    for key,state in model_state_serialize.items():
-        model_state_by_key[key]=ModelState(weights=state[0],history=state[1],times=state[2])
-    return model_state_by_key
+    return x_values, train_losses, validation_losses
+
+
+def plot_loss_visualization_2d(base_model, data, mode='all', title=None, output_filename=None, XYZ=None):
+    """
+    Visualizes the minimizer for a model along two random Gaussian filter-normalized directions.
+    :param base_model: model to evaluate
+    :param data: data to evaluate the model on, used to generate loss numbers
+    :param mode: plotting mode.
+       -'filled_contours': generate contours filled in with colors representing levels
+       -'contours': generate contours with no fill
+       -'surface': generate 3D surface plot
+       -'all': generate all of the above
+    :param title: title for the plot
+    :param output_filename: file to save the plot to
+    :param XYZ: tuple of (X, Y, Z) values. If provided, the function will skip loss computation and directly plot the values.
+    :return: X, Y, Z
+    """
+    # Use XYZ parameter for plotting
+    if XYZ:
+        X, Y, Z = XYZ
+    else:
+        # Get weights and generate random directions
+        weights = base_model.get_weights()
+        direction_one = get_random_filter_normalized_direction(weights)
+        direction_two = get_random_filter_normalized_direction(weights)
+
+        # Set up new model and plotting variables
+        x_values = np.linspace(-1, 1, 5)
+        y_values = np.linspace(-1, 1, 5)
+        X, Y = np.meshgrid(x_values, y_values)
+        Z = np.zeros((len(y_values), len(x_values)))
+        new_model = build_model()
+
+        # Compute loss for each linear combination of weight and direction
+        for i in range(len(y_values)):
+            for j in range(len(x_values)):
+                # Compute and set weights
+                x = x_values[j]
+                y = y_values[i]
+                print("\n x: {}, y: {}".format(x, y))
+                new_weights = [w + x * d1 + y * d2 for w, d1, d2 in zip(weights, direction_one, direction_two)]
+                new_model.set_weights(new_weights)
+
+                # Evaluate model
+                loss, accuracy = new_model.evaluate(data)
+
+                # Store losses
+                Z[i, j] = loss
+        
+    # Plot results
+    if mode == 'filled_contours':
+        plt.contourf(X, Y, Z, levels=np.arange(0, 5, 0.25))
+        plt.colorbar()
+    elif mode == 'contours':
+        CS = plt.contour(X, Y, Z, levels=np.arange(0, 5, 0.25))
+        plt.clabel(CS, inline=1, fontsize=8)
+    elif mode == 'surface':
+        ax = plt.axes(projection='3d')
+        ax.view_init(60, 35)
+        ax.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap='viridis', edgecolor='none')
+    elif mode == 'all':
+        fig = plt.figure(figsize=(5, 15))
+        # Plot filled contours
+        ax1 = fig.add_subplot(3, 1, 1)
+        cf = ax1.contourf(X, Y, Z, levels=np.arange(0, 5, 0.25))
+        plt.colorbar(cf, ax=ax1)
+
+        # Plot contours
+        ax2 = fig.add_subplot(3, 1, 2)
+        cs = ax2.contour(X, Y, Z, levels=np.arange(0, 5, 0.25))
+        plt.clabel(cs, inline=1, fontsize=8)
+
+        # Plot surface
+        ax3 = fig.add_subplot(3, 1, 3, projection='3d')
+        ax3.view_init(60, 35)
+        ax3.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap='viridis', edgecolor='none')
+        
+    # Add title and save plot if specified    
+    if title:
+        plt.title(title)
+    plt.show()
+    if output_filename:
+        plt.savefig('graphs/{}'.format(output_filename))
+    
+    return X, Y, Z

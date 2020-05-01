@@ -564,12 +564,37 @@ def get_negative_loss(flattened_weights, *args):
     """
     model, data, weight_shapes = args
     unflattened_weights = unflatten_weights(flattened_weights, weight_shapes)
-    model.layers[-1].set_weights(unflattened_weights)
+    model.set_weights(unflattened_weights)
     loss, accuracy = model.evaluate(data)
     return -loss
 
 
-def get_sharpness(model, data, epsilon=1e-2):
+def get_negative_loss_gradient(flattened_weights, *args):
+    """
+    Computes the gradient of the negative loss with respect to the model weights.
+    
+    :param flattened_weights: flattened model weights
+    :param *args: (model, data, weight_shapes)
+    :return: flattened gradient with respect to weights (1d vector)
+    """
+    print("Computing gradients")
+    model, data, weight_shapes = args
+    unflattened_weights = unflatten_weights(flattened_weights, weight_shapes)
+    model.set_weights(unflattened_weights)
+    
+    x = np.array([img.numpy() for img, label in data.unbatch()])
+    y = np.array([label.numpy() for img, label in data.unbatch()])
+    
+    with tf.GradientTape() as tape:
+        preds = model(x)
+        negative_loss = -tf.keras.losses.binary_crossentropy(y, preds)
+    
+    gradients = [tf.cast(g, tf.float64).numpy() for g in tape.gradient(negative_loss, model.trainable_variables)]
+    flattened_gradients = np.concatenate([g.flatten() for g in gradients])
+    return flattened_gradients
+
+
+def get_sharpness(model, data, epsilon=2e-2):
     """
     This function computes the sharpness of a minimizer by maximizing the loss in a neighborhood around the minimizer.
     Based on sharpness metric defined in https://arxiv.org/pdf/1609.04836.pdf.
@@ -583,12 +608,12 @@ def get_sharpness(model, data, epsilon=1e-2):
     original_loss, original_accuracy = model.evaluate(data)
     
     # Compute bounds on weights
-    last_layer_weights = model.layers[-1].get_weights()
-    last_layer_weight_shapes = [w.shape for w in last_layer_weights]
-    flattened_last_layer_weights = np.concatenate([x.flatten()for x in last_layer_weights])
-    delta = epsilon * (np.abs(flattened_last_layer_weights) + 1)
-    lower_bounds = flattened_last_layer_weights - delta 
-    upper_bounds = flattened_last_layer_weights + delta
+    weights = model.get_weights()
+    weight_shapes = [w.shape for w in weights]
+    flattened_weights = np.concatenate([x.flatten()for x in weights])
+    delta = epsilon * (np.abs(flattened_weights) + 1)
+    lower_bounds = flattened_weights - delta 
+    upper_bounds = flattened_weights + delta
     
     # Create copy of model so we don't modify original
     model.save('pickled_objects/sharpness_model_clone.h5')
@@ -598,17 +623,19 @@ def get_sharpness(model, data, epsilon=1e-2):
     # Minimize
     x, f, d = scipy.optimize.fmin_l_bfgs_b(
         func=get_negative_loss,
-        x0=flattened_last_layer_weights,
-        args=(model_clone, data, last_layer_weight_shapes),
-        approx_grad=True,
-        epsilon=0.1,  # Step size for estimating gradient
+        fprime=get_negative_loss_gradient,
+        x0=flattened_weights,
+        args=(model_clone, data, weight_shapes),
         bounds=list(zip(lower_bounds, upper_bounds)),
-        maxiter=1,
+        maxfun=10,
+        maxiter=2,
+        disp=1,
     )
     
     # Compute sharpness
     sharpness = (-f - original_loss) / (1 + original_loss) * 100
     return sharpness
+
 
 
 # Based on https://github.com/tomgoldstein/loss-landscape/blob/master/net_plotter.py#L195

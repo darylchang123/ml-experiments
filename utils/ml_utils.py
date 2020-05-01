@@ -577,21 +577,21 @@ def get_negative_loss_gradient(flattened_weights, *args):
     :param *args: (model, data, weight_shapes)
     :return: flattened gradient with respect to weights (1d vector)
     """
-    print("Computing gradients")
     model, data, weight_shapes = args
     unflattened_weights = unflatten_weights(flattened_weights, weight_shapes)
     model.set_weights(unflattened_weights)
     
-    x = np.array([img.numpy() for img, label in data.unbatch()])
-    y = np.array([label.numpy() for img, label in data.unbatch()])
-    
-    with tf.GradientTape() as tape:
-        preds = model(x)
-        negative_loss = -tf.keras.losses.binary_crossentropy(y, preds)
-    
-    gradients = [tf.cast(g, tf.float64).numpy() for g in tape.gradient(negative_loss, model.trainable_variables)]
-    flattened_gradients = np.concatenate([g.flatten() for g in gradients])
-    return flattened_gradients
+    batch_gradients = []
+    for x, y in data:
+        with tf.GradientTape() as tape:
+            preds = model(x)
+            negative_loss = -tf.keras.losses.binary_crossentropy(y, preds)
+
+        gradients = [tf.cast(g, tf.float64).numpy() for g in tape.gradient(negative_loss, model.trainable_variables)]
+        flattened_gradients = np.concatenate([g.flatten() for g in gradients])
+        batch_gradients.append(flattened_gradients)
+
+    return np.sum(batch_gradients, axis=0)
 
 
 def get_sharpness(model, data, epsilon=2e-2):

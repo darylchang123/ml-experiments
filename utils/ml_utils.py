@@ -585,7 +585,7 @@ def get_negative_loss_gradient(flattened_weights, *args):
     for x, y in data:
         with tf.GradientTape() as tape:
             preds = model(x)
-            negative_loss = -tf.keras.losses.binary_crossentropy(y, preds)
+            negative_loss = tf.math.negative(tf.math.reduce_mean(tf.keras.losses.binary_crossentropy(y, preds)))
 
         gradients = [tf.cast(g, tf.float64).numpy() for g in tape.gradient(negative_loss, model.trainable_variables)]
         flattened_gradients = np.concatenate([g.flatten() for g in gradients])
@@ -594,7 +594,7 @@ def get_negative_loss_gradient(flattened_weights, *args):
     return np.sum(batch_gradients, axis=0)
 
 
-def get_sharpness(model, data, epsilon=2e-2):
+def get_sharpness(model, data, epsilon=1e-2):
     """
     This function computes the sharpness of a minimizer by maximizing the loss in a neighborhood around the minimizer.
     Based on sharpness metric defined in https://arxiv.org/pdf/1609.04836.pdf.
@@ -629,13 +629,13 @@ def get_sharpness(model, data, epsilon=2e-2):
         bounds=list(zip(lower_bounds, upper_bounds)),
         maxfun=10,
         maxiter=2,
+        maxls=4,
         disp=1,
     )
     
     # Compute sharpness
     sharpness = (-f - original_loss) / (1 + original_loss) * 100
     return sharpness
-
 
 
 # Based on https://github.com/tomgoldstein/loss-landscape/blob/master/net_plotter.py#L195

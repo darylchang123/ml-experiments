@@ -6,6 +6,7 @@ from tensorflow.keras.applications.vgg16 import VGG16
 import tensorflow_datasets as tfds
 tfds.disable_progress_bar()
 
+from functools import reduce
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -14,6 +15,7 @@ from collections import namedtuple
 import os
 import pickle
 import random
+import scipy
 import time
 
 
@@ -381,7 +383,7 @@ def load_model_state(filename):
         model_state_by_key[key]=ModelState(weights=state[0],history=state[1],times=state[2])
     return model_state_by_key
 
-################################ VISUALIZATIONS ################################################################
+########################################## VISUALIZATIONS AND METRICS #################################################
 def summarize_diagnostics(history):
     """
     # Plot diagnostic learning curves
@@ -520,7 +522,121 @@ def visualize_weights(weights_by_key, filename, bins=None):
         plt.grid(True)
         plt.legend(loc='best')
     plt.savefig('graphs/{}'.format(filename))
+
     
+def get_num_elems_from_shape(shape):
+    """
+    Given the shape of a vector, returns how many elements are in the vector
+    :param shape: shape of vector
+    :return: number of elements
+    """
+    return reduce(lambda x,y: x*y, shape)
+
+
+def unflatten_weights(flattened_weights, weight_shapes):
+    """
+    Given a flattened vector of weights, and the desired shapes for each layer, this fn reshapes the weights.
+
+    :param flattened_weights: 1-dimensional vector containing weight values
+    :param weight_shapes: list of shapes (one per layer in model)
+    :return: list containing reshaped weight vectors (one per layer in model)
+    """
+    if len(flattened_weights) != sum([get_num_elems_from_shape(shape) for shape in weight_shapes]):
+        print("Weight shapes do not match number of flattened weights!")
+    i = 0
+    unflattened_weights = []
+    for shape in weight_shapes:
+        num_elems = get_num_elems_from_shape(shape)
+        reshaped_weights = np.reshape(flattened_weights[i:i+num_elems], shape)
+        unflattened_weights.append(reshaped_weights)
+        i += num_elems
+    return unflattened_weights
+
+
+def get_negative_loss(flattened_weights, *args):
+    """
+    This function sets the last layer of the model to the weights provided, then computes the negative loss.
+    This is used as a helper function for get_sharpness.
+    
+    :param flattened_weights: 1-dimensional vector containing weight values
+    :param *args: (model, data, weight_shapes)
+    :return: negative loss of model evaluated on the data provided
+    """
+    model, data, weight_shapes = args
+    unflattened_weights = unflatten_weights(flattened_weights, weight_shapes)
+    model.set_weights(unflattened_weights)
+    loss, accuracy = model.evaluate(data)
+    return -loss
+
+
+def get_negative_loss_gradient(flattened_weights, *args):
+    """
+    Computes the gradient of the negative loss with respect to the model weights.
+    
+    :param flattened_weights: flattened model weights
+    :param *args: (model, data, weight_shapes)
+    :return: flattened gradient with respect to weights (1d vector)
+    """
+    model, data, weight_shapes = args
+    unflattened_weights = unflatten_weights(flattened_weights, weight_shapes)
+    model.set_weights(unflattened_weights)
+    
+    batch_gradients = []
+    for x, y in data:
+        with tf.GradientTape() as tape:
+            preds = model(x)
+            negative_loss = tf.math.negative(tf.math.reduce_mean(tf.keras.losses.binary_crossentropy(y, preds)))
+
+        gradients = [tf.cast(g, tf.float64).numpy() for g in tape.gradient(negative_loss, model.trainable_variables)]
+        flattened_gradients = np.concatenate([g.flatten() for g in gradients])
+        batch_gradients.append(flattened_gradients)
+
+    return np.sum(batch_gradients, axis=0)
+
+
+def get_sharpness(model, data, epsilon=1e-2):
+    """
+    This function computes the sharpness of a minimizer by maximizing the loss in a neighborhood around the minimizer.
+    Based on sharpness metric defined in https://arxiv.org/pdf/1609.04836.pdf.
+    
+    :param model: model, where the weights represent a minimizer of the loss function
+    :param data: data to evaluate the model on
+    :param epsilon: controls the size of the neighborhood to explore
+    :return: sharpness
+    """
+    # Get original loss
+    original_loss, original_accuracy = model.evaluate(data)
+    
+    # Compute bounds on weights
+    weights = model.get_weights()
+    weight_shapes = [w.shape for w in weights]
+    flattened_weights = np.concatenate([x.flatten()for x in weights])
+    delta = epsilon * (np.abs(flattened_weights) + 1)
+    lower_bounds = flattened_weights - delta 
+    upper_bounds = flattened_weights + delta
+    
+    # Create copy of model so we don't modify original
+    model.save('pickled_objects/sharpness_model_clone.h5')
+    model_clone = keras.models.load_model('pickled_objects/sharpness_model_clone.h5')
+    os.remove('pickled_objects/sharpness_model_clone.h5')
+    
+    # Minimize
+    x, f, d = scipy.optimize.fmin_l_bfgs_b(
+        func=get_negative_loss,
+        fprime=get_negative_loss_gradient,
+        x0=flattened_weights,
+        args=(model_clone, data, weight_shapes),
+        bounds=list(zip(lower_bounds, upper_bounds)),
+        maxfun=10,
+        maxiter=2,
+        maxls=4,
+        disp=1,
+    )
+    
+    # Compute sharpness
+    sharpness = (-f - original_loss) / (1 + original_loss) * 100
+    return sharpness
+
 
 # Based on https://github.com/tomgoldstein/loss-landscape/blob/master/net_plotter.py#L195
 def get_random_filter_normalized_direction(weights):

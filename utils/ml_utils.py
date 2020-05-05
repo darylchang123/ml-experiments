@@ -627,9 +627,8 @@ def get_sharpness(model, data, epsilon=1e-2):
         x0=flattened_weights,
         args=(model_clone, data, weight_shapes),
         bounds=list(zip(lower_bounds, upper_bounds)),
-        maxfun=10,
-        maxiter=2,
-        maxls=4,
+        maxiter=10,
+        maxls=1,
         disp=1,
     )
     

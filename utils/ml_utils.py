@@ -188,9 +188,9 @@ class TimeHistory(keras.callbacks.Callback):
 
         
 def build_model(
-    conv_dropout_rate=0.2,
-    dense_dropout_rate=0.2,
-    optimizer=keras.optimizers.SGD(learning_rate=0.1),
+    conv_dropout_rate=0,
+    dense_dropout_rate=0.7,
+    optimizer=keras.optimizers.SGD(learning_rate=0.01),
     initializer=keras.initializers.glorot_uniform(seed=0),
     seed_value=0,
     conv_l1_regularizer=0,
@@ -198,7 +198,7 @@ def build_model(
     dense_l1_regularizer=0,
     dense_l2_regularizer=0,
     input_shape=(128,128,3),
-    use_batch_normalization=False,
+    use_batch_normalization=True,
 ):
     """
     Builds a base model according to the parameters specified. Architecture is similar to VGG16.
@@ -226,7 +226,7 @@ def build_model(
             kernel_size=3,
             strides=1,
             padding='same',
-            activation='relu',
+            activation=None,
             kernel_initializer=initializer,
             kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
             bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
@@ -238,12 +238,13 @@ def build_model(
             kernel_size=3,
             strides=1,
             padding='same',
-            activation='relu',
+            activation=None,
             kernel_initializer=initializer,
             kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
             bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
         ))
     add_batch_norm()
+    model.add(layers.ReLU())
     model.add(layers.MaxPooling2D())
     model.add(layers.Dropout(
         rate=conv_dropout_rate,
@@ -254,12 +255,13 @@ def build_model(
         kernel_size=3,
         strides=1,
         padding='same',
-        activation='relu',
+        activation=None,
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
         bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
     ))
     add_batch_norm()
+    model.add(layers.ReLU())
     model.add(layers.MaxPooling2D())
     model.add(layers.Dropout(
         rate=conv_dropout_rate,
@@ -270,12 +272,13 @@ def build_model(
         kernel_size=3,
         strides=1,
         padding='same',
-        activation='relu',
+        activation=None,
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
         bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
     ))
     add_batch_norm()
+    model.add(layers.ReLU())
     model.add(layers.MaxPooling2D())
     model.add(layers.Dropout(
         rate=conv_dropout_rate,
@@ -286,12 +289,13 @@ def build_model(
         kernel_size=3,
         strides=1,
         padding='same',
-        activation='relu',
+        activation=None,
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
         bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
     ))
     add_batch_norm()
+    model.add(layers.ReLU())
     model.add(layers.MaxPooling2D())
     model.add(layers.Dropout(
         rate=conv_dropout_rate,
@@ -302,12 +306,13 @@ def build_model(
         kernel_size=3,
         strides=1,
         padding='same',
-        activation='relu',
+        activation=None,
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
         bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
     ))
     add_batch_norm()
+    model.add(layers.ReLU())
     model.add(layers.MaxPooling2D())
     model.add(layers.Dropout(
         rate=dense_dropout_rate,
@@ -316,24 +321,26 @@ def build_model(
     model.add(layers.Flatten())
     model.add(layers.Dense(
         units=256, 
-        activation='relu', 
+        activation=None, 
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer),
         bias_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer)
     ))
     add_batch_norm()
+    model.add(layers.ReLU())
     model.add(layers.Dropout(
         rate=dense_dropout_rate,
         seed=seed_value
     ))
     model.add(layers.Dense(
         units=256, 
-        activation='relu', 
+        activation=None, 
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer),
         bias_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer)
     ))
     add_batch_norm()
+    model.add(layers.ReLU())
     model.add(layers.Dropout(
         rate=dense_dropout_rate,
         seed=seed_value
@@ -347,6 +354,7 @@ def build_model(
     ))
     model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     return model
+
 
 
 def train_model(model, train, validation, epochs, extra_callbacks=[]):

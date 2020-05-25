@@ -188,8 +188,8 @@ class TimeHistory(keras.callbacks.Callback):
 
         
 def build_model(
-    conv_dropout_rate=0,
-    dense_dropout_rate=0.7,
+    conv_dropout_rate=0.2,
+    dense_dropout_rate=0.4,
     optimizer=keras.optimizers.SGD(learning_rate=0.01),
     initializer=keras.initializers.glorot_uniform(seed=0),
     seed_value=0,
@@ -199,6 +199,8 @@ def build_model(
     dense_l2_regularizer=0,
     input_shape=(128,128,3),
     use_batch_normalization=True,
+    conv_kernel_constraint=None,
+    dense_kernel_constraint=None,
 ):
     """
     Builds a base model according to the parameters specified. Architecture is similar to VGG16.
@@ -229,7 +231,8 @@ def build_model(
             activation=None,
             kernel_initializer=initializer,
             kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
-            bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+            bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+            kernel_constraint=conv_kernel_constraint
         ))
     else:
         model.add(layers.Conv2D(
@@ -241,11 +244,12 @@ def build_model(
             activation=None,
             kernel_initializer=initializer,
             kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
-            bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+            bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+            kernel_constraint=conv_kernel_constraint
         ))
-    add_batch_norm()
-    model.add(layers.ReLU())
     model.add(layers.MaxPooling2D())
+    model.add(layers.ReLU())
+    add_batch_norm()
     model.add(layers.Dropout(
         rate=conv_dropout_rate,
         seed=seed_value
@@ -258,11 +262,12 @@ def build_model(
         activation=None,
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
-        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+        kernel_constraint=conv_kernel_constraint
     ))
-    add_batch_norm()
-    model.add(layers.ReLU())
     model.add(layers.MaxPooling2D())
+    model.add(layers.ReLU())
+    add_batch_norm()
     model.add(layers.Dropout(
         rate=conv_dropout_rate,
         seed=seed_value
@@ -275,11 +280,12 @@ def build_model(
         activation=None,
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
-        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+        kernel_constraint=conv_kernel_constraint
     ))
-    add_batch_norm()
-    model.add(layers.ReLU())
     model.add(layers.MaxPooling2D())
+    model.add(layers.ReLU())
+    add_batch_norm()
     model.add(layers.Dropout(
         rate=conv_dropout_rate,
         seed=seed_value
@@ -292,11 +298,12 @@ def build_model(
         activation=None,
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
-        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+        kernel_constraint=conv_kernel_constraint
     ))
-    add_batch_norm()
-    model.add(layers.ReLU())
     model.add(layers.MaxPooling2D())
+    model.add(layers.ReLU())
+    add_batch_norm()
     model.add(layers.Dropout(
         rate=conv_dropout_rate,
         seed=seed_value
@@ -309,11 +316,12 @@ def build_model(
         activation=None,
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
-        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer)
+        bias_regularizer=regularizers.l1_l2(l1=conv_l1_regularizer, l2=conv_l2_regularizer),
+        kernel_constraint=conv_kernel_constraint
     ))
-    add_batch_norm()
-    model.add(layers.ReLU())
     model.add(layers.MaxPooling2D())
+    model.add(layers.ReLU())
+    add_batch_norm()
     model.add(layers.Dropout(
         rate=dense_dropout_rate,
         seed=seed_value
@@ -324,10 +332,11 @@ def build_model(
         activation=None, 
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer),
-        bias_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer)
+        bias_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer),
+        kernel_constraint=dense_kernel_constraint
     ))
-    add_batch_norm()
     model.add(layers.ReLU())
+    add_batch_norm()
     model.add(layers.Dropout(
         rate=dense_dropout_rate,
         seed=seed_value
@@ -337,10 +346,11 @@ def build_model(
         activation=None, 
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer),
-        bias_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer)
+        bias_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer),
+        kernel_constraint=dense_kernel_constraint
     ))
-    add_batch_norm()
     model.add(layers.ReLU())
+    add_batch_norm()
     model.add(layers.Dropout(
         rate=dense_dropout_rate,
         seed=seed_value
@@ -350,7 +360,8 @@ def build_model(
         activation='sigmoid', 
         kernel_initializer=initializer,
         kernel_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer),
-        bias_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer)
+        bias_regularizer=regularizers.l1_l2(l1=dense_l1_regularizer, l2=dense_l2_regularizer),
+        kernel_constraint=dense_kernel_constraint
     ))
     model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     return model
@@ -429,8 +440,8 @@ def plot_accuracies_by_param(model_state_by_type, param_name, filename, ylim_lef
     :param param_name: String name of the parameter (e.g. 'batch size')
     :param filename: file to save the plot to
     """
-    plt.figure(figsize=(10, 10), dpi=80)
-    plt.subplot(211)
+    plt.figure(figsize=(20, 7), dpi=80)
+    plt.subplot(121)
     plt.title('Effect of {} on training accuracy'.format(param_name))
     for typ, state in model_state_by_type.items():
         plt.plot(state.history['accuracy'], label=str(typ))
@@ -440,7 +451,7 @@ def plot_accuracies_by_param(model_state_by_type, param_name, filename, ylim_lef
         plt.grid(True)
         plt.legend(loc='best')
     
-    plt.subplot(212)
+    plt.subplot(122)
     plt.title('Effect of {} on validation accuracy'.format(param_name))
     for typ, state in model_state_by_type.items():
         plt.plot(state.history['val_accuracy'], label=str(typ))
@@ -463,8 +474,8 @@ def plot_loss_by_param(model_state_by_type, param_name, filename, ylim_left=None
     :param param_name: String name of the parameter (e.g. 'batch size')
     :param filename: file to save the plot to
     """
-    plt.figure(figsize=(10, 10), dpi=80)
-    plt.subplot(211)
+    plt.figure(figsize=(20, 7), dpi=80)
+    plt.subplot(121)
     plt.title('Effect of {} on training loss'.format(param_name))
     for typ, state in model_state_by_type.items():
         plt.plot(state.history['loss'], label=str(typ))
@@ -474,7 +485,7 @@ def plot_loss_by_param(model_state_by_type, param_name, filename, ylim_left=None
         plt.grid(True)
         plt.legend(loc='best')
     
-    plt.subplot(212)
+    plt.subplot(122)
     plt.title('Effect of {} on validation loss'.format(param_name))
     for typ, state in model_state_by_type.items():
         plt.plot(state.history['val_loss'], label=str(typ))

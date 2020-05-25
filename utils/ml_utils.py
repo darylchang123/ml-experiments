@@ -189,7 +189,7 @@ class TimeHistory(keras.callbacks.Callback):
         
 def build_model(
     conv_dropout_rate=0.2,
-    dense_dropout_rate=0.4,
+    dense_dropout_rate=0.6,
     optimizer=keras.optimizers.SGD(learning_rate=0.01),
     initializer=keras.initializers.glorot_uniform(seed=0),
     seed_value=0,

@@ -350,7 +350,6 @@ def build_model(
         kernel_constraint=dense_kernel_constraint
     ))
     model.add(layers.ReLU())
-    add_batch_norm()
     model.add(layers.Dropout(
         rate=dense_dropout_rate,
         seed=seed_value

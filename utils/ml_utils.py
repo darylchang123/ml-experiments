@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from collections import namedtuple
 import os
+import multiprocessing
 import pickle
 import random
 import scipy
@@ -401,6 +402,102 @@ def load_model_state(filename):
         model_state_by_key[key]=ModelState(weights=state[0],history=state[1],times=state[2])
     return model_state_by_key
 
+
+class Predictor(multiprocessing.Process):
+    def __init__(self, input_queue, output_queue, gpu_id):
+        multiprocessing.Process.__init__(self)
+        self.input_queue = input_queue
+        self.output_queue = output_queue
+        self.gpu_id = gpu_id
+        
+    def run(self):
+        # set GPU id before importing tensorflow!
+        os.environ["CUDA_VISIBLE_DEVICES"] = "{}".format(self.gpu_id)
+        
+        # import tensorflow here
+        import tensorflow as tf
+        import tensorflow_datasets as tfds
+        from tensorflow import keras
+        import utils.ml_utils as ml_utils
+        
+        # Set seeds
+        ml_utils.init_env()
+
+        # Constants
+        IMG_SIZE = 128 # All images in the dataset will be resized to this size
+        BATCH_SIZE = 32 # Batch size
+        
+        # Read in training and validation data
+        train, validation = ml_utils.load_batched_and_resized_dataset(
+            dataset_name='cats_vs_dogs',
+            batch_size=BATCH_SIZE,
+            img_size=IMG_SIZE
+        )
+        
+        # Train models
+        while not self.input_queue.empty():
+            i, param_dict = self.input_queue.get()
+            model = ml_utils.build_model(**param_dict)
+            model_state = ml_utils.train_model(
+                model,
+                train,
+                validation,
+                epochs=1,
+            )
+            self.output_queue.put((i, model_state.history))
+        return
+
+"""
+PredictorPool is a class that parallelizes the training of multiple models (one model per GPU). It instantiates a
+a pool of worker processes (one per GPU). Then, the user provides a list of parameters, each one corresponding
+to a model training run. The worker processes will work through the list of model training runs, then return an
+output list of the model histories.
+
+Example usage:
+
+    pool = ml_utils.PredictorPool(2)        # 2 GPUs
+    model_histories = pool.map([
+        {'optimizer': keras.optimizers.SGD(0.001)},
+        {'optimizer': keras.optimizers.SGD(0.01)},
+        {'optimizer': keras.optimizers.SGD(0.1)},
+    ])
+    
+Note that you cannot use the tensorflow module before using this class. Thus, you may need to restart your kernel
+before using this class.
+"""
+class PredictorPool:
+    
+    def __init__(self, num_gpus):
+        self.num_gpus = num_gpus
+        self.input_queue = multiprocessing.Queue()
+        self.output_queue = multiprocessing.Queue()
+        self.p_list = [Predictor(self.input_queue, self.output_queue, gpu_id) for gpu_id in range(self.num_gpus)]
+    
+    
+    def map(self, param_dict_list):
+        # Populate input queue
+        for i, param_dict in enumerate(param_dict_list):
+            self.input_queue.put((i, param_dict))
+    
+        # Run processes
+        for p in self.p_list:
+            p.start()
+        for p in self.p_list:
+            p.join()
+            
+        # Get outputs
+        outputs = []
+        while not self.output_queue.empty():
+            outputs.append(self.output_queue.get())
+        sorted_outputs = [history for i, history in sorted(outputs)]
+        
+        # Terminate processes
+        for p in self.p_list:
+            p.terminate()
+        
+        return sorted_outputs
+
+    
 ########################################## VISUALIZATIONS AND METRICS #################################################
 def summarize_diagnostics(history):
     """

@@ -368,13 +368,14 @@ def build_model(
 
 
 
-def train_model(model, train, validation, epochs, extra_callbacks=[]):
+def train_model(model, train, validation, epochs, extra_callbacks=[], verbose=0):
     time_callback = TimeHistory()
     history = model.fit(
         train,
         epochs=epochs,
         validation_data=validation,
-        callbacks=[time_callback] + extra_callbacks
+        callbacks=[time_callback] + extra_callbacks,
+        verbose=verbose,
     )
     return get_model_state(model, history, time_callback)
     
@@ -437,12 +438,15 @@ class Predictor(multiprocessing.Process):
         # Train models
         while not self.input_queue.empty():
             i, param_dict = self.input_queue.get()
+            print("Training run: {}, params: {}".format(i, param_dict))
             model = ml_utils.build_model(**param_dict)
+            es = keras.callbacks.EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=50)
             model_state = ml_utils.train_model(
                 model,
                 train,
                 validation,
-                epochs=1,
+                epochs=1000,
+                extra_callbacks=[es],
             )
             self.output_queue.put((i, model_state.history))
         return

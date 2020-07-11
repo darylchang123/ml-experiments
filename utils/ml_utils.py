@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from collections import namedtuple
 import os
+import queue
 import multiprocessing
 import pickle
 import random
@@ -428,12 +429,12 @@ class Predictor(multiprocessing.Process):
         IMG_SIZE = 128 # All images in the dataset will be resized to this size
         BATCH_SIZE = 32 # Batch size
         
-        # Read in training and validation data
-        train, validation = ml_utils.load_batched_and_resized_dataset(
-            dataset_name='cats_vs_dogs',
-            batch_size=BATCH_SIZE,
-            img_size=IMG_SIZE
-        )
+#         # Read in training and validation data
+#         train, validation = ml_utils.load_batched_and_resized_dataset(
+#             dataset_name='cats_vs_dogs',
+#             batch_size=BATCH_SIZE,
+#             img_size=IMG_SIZE
+#         )
         
         # Train models
         while not self.input_queue.empty():
@@ -441,14 +442,16 @@ class Predictor(multiprocessing.Process):
             print("Training run: {}, params: {}".format(i, param_dict))
             model = ml_utils.build_model(**param_dict)
             es = keras.callbacks.EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=50)
-            model_state = ml_utils.train_model(
-                model,
-                train,
-                validation,
-                epochs=1000,
-                extra_callbacks=[es],
-            )
-            self.output_queue.put((i, model_state.history))
+#             model_state = ml_utils.train_model(
+#                 model,
+#                 train,
+#                 validation,
+#                 epochs=1000,
+#                 extra_callbacks=[es],
+#             )
+            self.output_queue.put((i, np.random.rand(1000))) #model_state.history))
+            print("GPU ", self.gpu_id, " finished input ", i)
+        print("Done with process for GPU ", self.gpu_id)
         return
 
 """
@@ -482,6 +485,8 @@ class PredictorPool:
         # Populate input queue
         for i, param_dict in enumerate(param_dict_list):
             self.input_queue.put((i, param_dict))
+            
+        print("Starting processes")
     
         # Run processes
         for p in self.p_list:
@@ -489,10 +494,19 @@ class PredictorPool:
         for p in self.p_list:
             p.join()
             
+        print("Input queue size: ", self.input_queue.qsize())
+            
         # Get outputs
         outputs = []
         while not self.output_queue.empty():
+            print("Output queue size: ", self.output_queue.qsize())
             outputs.append(self.output_queue.get())
+#             try:
+#                 output = self.output_queue.get_nowait()
+#                 print("Output: ", output)
+#                 outputs.append(output)
+#             except queue.Empty:
+#                 print("Output queue is empty")
         sorted_outputs = [history for i, history in sorted(outputs)]
         
         # Terminate processes
